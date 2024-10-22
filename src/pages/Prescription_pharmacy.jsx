@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore'; // Add doc and setDoc for updating Firebase
-import { db } from '../firebase-config'; // Ensure correct path to firebase config
+import { collection, getDocs, doc, setDoc, getDoc } from 'firebase/firestore'; // Add getDoc for fetching a single document
+import { db } from '../firebase-config'; // Import Firebase config
 import { useNavigate } from 'react-router-dom'; // Import useNavigate from react-router-dom
 import CryptoJS from 'crypto-js'; // Import CryptoJS
-import './Prescription_pharmacy.css'; // Make sure to import CSS
+import './Prescription_pharmacy.css'; // Import CSS
 
 function PrescriptionsList() {
   const [prescriptions, setPrescriptions] = useState([]);
@@ -41,7 +41,7 @@ function PrescriptionsList() {
         const data = doc.data();
 
         const decryptedPrescription = {
-          id: doc.id, 
+          id: doc.id,
           doctor: {
             doctorName: decryptPrescriptionData(data.doctor.doctorName),
             biography: decryptPrescriptionData(data.doctor.biography),
@@ -51,7 +51,6 @@ function PrescriptionsList() {
           diagnosis: decryptPrescriptionData(data.diagnosis),
           note: decryptPrescriptionData(data.note),
           appointmentNo: decryptPrescriptionData(data.appointmentNo),
-          referenceNo: data.referenceNo, // Directly take referenceNo from Firebase without decryption
           nicNo: decryptPrescriptionData(data.nicNo), // Decrypt nicNo
           medicines: data.medicines.map((med) => ({
             medicineName: decryptPrescriptionData(med.medicineName),
@@ -59,17 +58,48 @@ function PrescriptionsList() {
             days: decryptPrescriptionData(med.days),
           })),
           createdDate: data.createdDate,
-          completed: false // Add completed field
+          // Initialize status as 'Pending', will be updated after fetching from ConfirmPrescription
+          status: 'Pending',
         };
 
         prescriptionsData.push(decryptedPrescription);
       });
 
-      setPrescriptions(prescriptionsData);
-      setLoading(false);
+      // Sort prescriptions by id in descending order
+      prescriptionsData.sort((a, b) => b.id.localeCompare(a.id));
+
+      // After fetching prescriptions, fetch their status from ConfirmPrescription
+      await fetchStatuses(prescriptionsData);
     } catch (error) {
       console.error("Error fetching prescriptions:", error);
       setError('Error fetching prescriptions: ' + error.message);
+      setLoading(false);
+    }
+  };
+
+  const fetchStatuses = async (prescriptionsData) => {
+    try {
+      const statusPromises = prescriptionsData.map(async (prescription) => {
+        const statusRef = doc(db, 'ConfirmPrescription', prescription.id);
+        const statusDoc = await getDoc(statusRef);
+        
+        if (statusDoc.exists()) {
+          const statusData = statusDoc.data();
+          // Update the prescription status based on the ConfirmPrescription Action
+          return { ...prescription, status: statusData.Action };
+        } else {
+          // If the status document doesn't exist, keep it as 'Pending'
+          return prescription; // Return the prescription as is with status 'Pending'
+        }
+      });
+
+      const updatedPrescriptions = await Promise.all(statusPromises);
+      setPrescriptions(updatedPrescriptions);
+      setFilteredPrescriptions(updatedPrescriptions); // Set filtered prescriptions to show all initially
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching statuses:", error);
+      setError('Error fetching statuses: ' + error.message);
       setLoading(false);
     }
   };
@@ -84,7 +114,6 @@ function PrescriptionsList() {
     const filtered = prescriptions.filter((prescription) => {
       return (
         (prescription.patient?.toLowerCase() || '').includes(searchText) ||
-        (prescription.referenceNo?.toLowerCase() || '').includes(searchText) ||
         (prescription.appointmentNo?.toLowerCase() || '').includes(searchText) ||
         (prescription.nicNo?.toLowerCase() || '').includes(searchText) ||
         (prescription.id.toLowerCase() || '').includes(searchText) // Include prescription ID in the search
@@ -103,18 +132,18 @@ function PrescriptionsList() {
   };
 
   // Function to update the status in ConfirmPrescription collection
-  const toggleCompleted = async (id, isCompleted) => {
+  const updateStatus = async (id, action) => {
     try {
       const prescriptionRef = doc(db, 'ConfirmPrescription', id); // Reference to the document in ConfirmPrescription collection
 
-      // Update or add the prescription with the new completed status
-      await setDoc(prescriptionRef, { Action: isCompleted ? 'Completed' : 'Not Completed' });
+      // Update the prescription with the new status
+      await setDoc(prescriptionRef, { Action: action });
 
       // Update the local state to reflect the change in the UI
       setFilteredPrescriptions((prev) =>
         prev.map((prescription) =>
           prescription.id === id
-            ? { ...prescription, completed: !prescription.completed }
+            ? { ...prescription, status: action } // Update the status field
             : prescription
         )
       );
@@ -137,7 +166,7 @@ function PrescriptionsList() {
       <div className="search-bar">
         <input
           type="text"
-          placeholder="Search by patient name, reference number, appointment number, NIC, or Prescription ID"
+          placeholder="Search by patient name, appointment number, NIC, or Prescription ID"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)} 
         />
@@ -147,34 +176,30 @@ function PrescriptionsList() {
         <thead>
           <tr>
             <th>Prescription ID</th>
-            <th>Reference No</th>
             <th>Appointment No</th>
             <th>Patient Name</th>
             <th>NIC</th>
             <th>Prescription</th>
-            <th>Action</th> {/* Add a new header for Action */}
+            <th>Status</th> {/* Status column */}
           </tr>
         </thead>
         <tbody>
           {filteredPrescriptions.map((prescription) => (
             <tr key={prescription.id}>
-              <td>{prescription.id}</td> {/* Display Prescription ID */}
-              <td>{prescription.referenceNo}</td> {/* Display Reference No */}
-              <td>{prescription.appointmentNo}</td> {/* Display Appointment No */}
-              <td>{prescription.patient}</td> {/* Display Patient Name */}
-              <td>{prescription.nicNo}</td> {/* Display NIC */}
+              <td>{prescription.id}</td> {/* Display actual prescription ID */}
+              <td>{prescription.appointmentNo}</td>
+              <td>{prescription.patient}</td>
+              <td>{prescription.nicNo}</td>
               <td>
                 <button onClick={() => handleViewPrescription(prescription.id)}>
                   View Prescription
                 </button>
               </td>
               <td>
-                <button
-                  className={`status-button ${prescription.completed ? 'completed' : ''}`}
-                  onClick={() => toggleCompleted(prescription.id, !prescription.completed)}
-                >
-                  {prescription.completed ? 'Completed' : 'Not Completed'}
-                </button>
+                {/* Show status based on the current state */}
+                {prescription.status === 'Completed' && <span>Completed</span>}
+                {prescription.status === 'Prescription Issued' && <span>Prescription Issued</span>}
+                {prescription.status === 'Pending' && <span>Pending</span>}
               </td>
             </tr>
           ))}

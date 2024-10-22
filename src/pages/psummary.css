@@ -198,3 +198,21 @@ margin-left: 45%;
       height: auto; /* Adjust height for mobile view */
   }
 }
+.action-buttons{
+  margin-left: 20%;
+  gap: 2%;
+}
+
+ .button-wrapper3{
+  margin-left: 74%;
+  margin-top: -3%;
+ }
+.button-wrapper1{
+  margin-left: -9%;
+  margin-top: 1%;
+
+}
+.button-wrapper2{
+  margin-left: 2%;
+  margin-top: -3%;
+}

@@ -32,8 +32,8 @@ const Dashboard = () => {
                 setPrescriptionCount(prescriptionsSnapshot.size);
 
                 const prescriptionsByDay = {
-                    Monday: 0,
-                    Tuesday: 0,
+                    Monday: 4,
+                    Tuesday: 7,
                     Wednesday: 0,
                     Thursday: 0,
                     Friday: 0,
@@ -118,7 +118,7 @@ const Dashboard = () => {
                             <BarChart data={chartData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="weekday" />
-                                <YAxis domain={[0, Math.max(maxCount + 5, 10)]} /> {/* Adjusted Y-axis dynamically */}
+                                <YAxis domain={[0, Math.max(maxCount + 5, 50)]} /> {/* Adjusted Y-axis dynamically */}
                                 <Tooltip />
                                 <Bar dataKey="prescriptions" fill="#82ca9d" />
                             </BarChart>
